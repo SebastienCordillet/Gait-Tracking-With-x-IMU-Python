@@ -7,6 +7,14 @@ from scipy import signal
 from matplotlib import pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 from main import getIMU, selTime
+from plotFrames import labFrame, addFrames, addOrigin
+
+import plotly.express as px
+from plotly.offline import plot
+import plotly.graph_objects as go
+
+import plotly.io as pio
+pio.renderers.default='browser'
 
 # filePath = 'datasets/straightLine'
 # startTime = 6
@@ -24,7 +32,7 @@ filePath = 'data_marche.c3d'
 
 
 startTime = 0
-stopTime = 45
+stopTime = 60
 # samplePeriod = 1/256
 
 
@@ -37,10 +45,13 @@ lfoot=getIMU(filePath, chanelName='Right_Tibialis Anterior', mag=False)
 # lfoot=getIMU(filePath, chanelName='Left_Semitendinosus', mag=False)
 
 
-rate=lfoot.attrs['rate']
+# rate=lfoot.attrs['rate']
+rate=120
 samplePeriod=1/rate
 # print(lfoot) # OK
 lfoot=lfoot.meca.time_normalize(time_vector=selTime([startTime,stopTime],rate))
+
+
 # print(lfoot)
 time = lfoot['time'].values
 gyrX = lfoot.sel(channel='GYRO_X').values
@@ -59,15 +70,31 @@ filtCutOff = 5
 b, a = signal.butter(1, (2*filtCutOff)/(1/samplePeriod), 'lowpass')
 acc_magFilt = signal.filtfilt(b, a, acc_mag-1, padtype = 'odd', padlen=3*(max(len(b),len(a))-1))
 
+filtCutOff = 2
+b, a = signal.butter(1, (2*filtCutOff)/(1/samplePeriod), 'lowpass')
+accX = signal.filtfilt(b, a, accX, padtype = 'odd', padlen=3*(max(len(b),len(a))-1))
+accY = signal.filtfilt(b, a, accY, padtype = 'odd', padlen=3*(max(len(b),len(a))-1))
+accZ = signal.filtfilt(b, a, accZ, padtype = 'odd', padlen=3*(max(len(b),len(a))-1))
+
+gyrX = signal.filtfilt(b, a, gyrX, padtype = 'odd', padlen=3*(max(len(b),len(a))-1))
+gyrY = signal.filtfilt(b, a, gyrY, padtype = 'odd', padlen=3*(max(len(b),len(a))-1))
+gyrZ = signal.filtfilt(b, a, gyrZ, padtype = 'odd', padlen=3*(max(len(b),len(a))-1))
+
+
+
 # Threshold detection
 stationary = acc_magFilt < 0.20
 
-plt.figure()
-plt.plot(time,acc_magFilt)
-plt.plot(time,stationary)
-plt.legend()
-plt.show
+# plt.figure()
+# plt.plot(time,acc_magFilt)
+# plt.plot(time,stationary)
+# # plt.legend()
+# plt.show
 
+# fig=go.Figure()
+# fig.add_trace(go.Scatter(x=time, y=acc_magFilt, name='accNorm'))
+# fig.add_trace(go.Scatter(x=time,y=stationary.astype(int), name='IsStationnary'))
+# plot(fig)
 
 # Compute orientation
 quat  = np.zeros((time.size, 4), dtype=np.float64)
@@ -97,8 +124,22 @@ for t in range(1,time.size):
     else:
         quat[t,:]=angular_rate.update(q, gyr)
 
+# plt.figure()
+# plt.plot(np.array([q2euler(q)*180/np.pi for q in quat]))
+# plt.legend(['X','Y','Z'])
+# plt.show()
 
-plt.plot(np.array([q2euler(q)*180/np.pi for q in quat]))
+
+EA=np.array([q2euler(q)*180/np.pi for q in quat])
+fig2=go.Figure()
+fig2.add_trace(go.Scatter(x=time, y=EA[:,0], name='X'))
+fig2.add_trace(go.Scatter(x=time, y=EA[:,1], name='Y'))
+fig2.add_trace(go.Scatter(x=time, y=EA[:,2], name='Z'))
+# plot(fig2)
+
+# fig=px.line(np.array([q2euler(q)*180/np.pi for q in quat]))
+
+
     # quat[t,:]=mahony.updateIMU(q,gyr=gyr,acc=acc)
 # For all data
 # for t in range(0,time.size):
@@ -114,10 +155,16 @@ plt.plot(np.array([q2euler(q)*180/np.pi for q in quat]))
 # Compute translational accelerations
 
 # Rotate body accelerations to Earth frame
-fig = plt.figure(figsize=(10, 5))
-plt.plot(time,accX*9.81,c='r',linestyle=':',linewidth=0.5)
-plt.plot(time,accY*9.81,c='g',linestyle=':',linewidth=0.5)
-plt.plot(time,accZ*9.81,c='b',linestyle=':',linewidth=0.5)
+fig3=go.Figure()
+fig3.add_trace(go.Scatter(x=time,y= accX*9.81, line=dict(color='red', dash='dot')))
+fig3.add_trace(go.Scatter(x=time,y= accY*9.81, line=dict(color='green', dash='dot')))
+fig3.add_trace(go.Scatter(x=time,y= accZ*9.81, line=dict(color='blue', dash='dot')))
+
+
+# # fig = plt.figure(figsize=(10, 5))
+# plt.plot(time,accX*9.81,lines(dict(color='r', dash='dot')))
+# plt.plot(time,accY*9.81,c='g',linestyle=':',linewidth=0.5)
+# plt.plot(time,accZ*9.81,c='b',linestyle=':',linewidth=0.5)
 
 acc = []
 for x,y,z,q in zip(accX,accY,accZ,quat):
@@ -127,15 +174,20 @@ acc = np.array(acc)
 acc = acc - np.array([0,0,1])
 acc = acc * 9.81
 
+fig3.add_trace(go.Scatter(x=time,y= acc[:,0], line=dict(color='red')))
+fig3.add_trace(go.Scatter(x=time,y= acc[:,1], line=dict(color='green')))
+fig3.add_trace(go.Scatter(x=time,y= acc[:,2], line=dict(color='blue')))
+# plot(fig3)
 
-plt.plot(time,acc[:,0],c='r',linewidth=0.5)
-plt.plot(time,acc[:,1],c='g',linewidth=0.5)
-plt.plot(time,acc[:,2],c='b',linewidth=0.5)
-plt.legend(["x","y","z"])
-plt.title("acceleration")
-plt.xlabel("time (s)")
-plt.ylabel("accerelation (m/s²)")
-plt.show(block=False)
+
+# plt.plot(time,acc[:,0],c='r',linewidth=0.5)
+# plt.plot(time,acc[:,1],c='g',linewidth=0.5)
+# plt.plot(time,acc[:,2],c='b',linewidth=0.5)
+# plt.legend(["x","y","z"])
+# plt.title("acceleration")
+# plt.xlabel("time (s)")
+# plt.ylabel("accerelation (m/s²)")
+# plt.show(block=False)
 
 
 # Compute translational velocities
@@ -150,10 +202,10 @@ for t in range(1,vel.shape[0]):
 
 # Compute integral drift during non-stationary periods
 
-fig = plt.figure(figsize=(10, 5))
-plt.plot(time,vel[:,0],c='r',linestyle=':',linewidth=0.5)
-plt.plot(time,vel[:,1],c='g',linestyle=':',linewidth=0.5)
-plt.plot(time,vel[:,2],c='b',linestyle=':',linewidth=0.5)
+# fig = plt.figure(figsize=(10, 5))
+# plt.plot(time,vel[:,0],c='r',linestyle=':',linewidth=0.5)
+# plt.plot(time,vel[:,1],c='g',linestyle=':',linewidth=0.5)
+# plt.plot(time,vel[:,2],c='b',linestyle=':',linewidth=0.5)
 
 velDrift = np.zeros(vel.shape)
 stationaryStart = np.where(np.diff(stationary.astype(int)) == -1)[0]+1
@@ -167,14 +219,14 @@ for i in range(0,stationaryEnd.shape[0]-1):
 # Remove integral drift
 vel = vel - velDrift
 # fig = plt.figure(figsize=(10, 5))
-plt.plot(time,vel[:,0],c='r',linewidth=0.5)
-plt.plot(time,vel[:,1],c='g',linewidth=0.5)
-plt.plot(time,vel[:,2],c='b',linewidth=0.5)
-plt.legend(["x","y","z"])
-plt.title("velocity")
-plt.xlabel("time (s)")
-plt.ylabel("velocity (m/s)")
-plt.show(block=False)
+# plt.plot(time,vel[:,0],c='r',linewidth=0.5)
+# plt.plot(time,vel[:,1],c='g',linewidth=0.5)
+# plt.plot(time,vel[:,2],c='b',linewidth=0.5)
+# plt.legend(["x","y","z"])
+# plt.title("velocity")
+# plt.xlabel("time (s)")
+# plt.ylabel("velocity (m/s)")
+# plt.show(block=False)
 
 # -------------------------------------------------------------------------
 # Compute translational position
@@ -182,40 +234,49 @@ pos = np.zeros(vel.shape)
 for t in range(1,pos.shape[0]):
     pos[t,:] = pos[t-1,:] + vel[t,:]*samplePeriod
 
-fig = plt.figure(figsize=(10, 5))
-plt.plot(time,pos[:,0],c='r',linewidth=0.5)
-plt.plot(time,pos[:,1],c='g',linewidth=0.5)
-plt.plot(time,pos[:,2],c='b',linewidth=0.5)
-plt.legend(["x","y","z"])
-plt.title("position")
-plt.xlabel("time (s)")
-plt.ylabel("position (m)")
-plt.show(block=False)
+# fig = plt.figure(figsize=(10, 5))
+# plt.plot(time,pos[:,0],c='r',linewidth=0.5)
+# plt.plot(time,pos[:,1],c='g',linewidth=0.5)
+# plt.plot(time,pos[:,2],c='b',linewidth=0.5)
+# plt.legend(["x","y","z"])
+# plt.title("position")
+# plt.xlabel("time (s)")
+# plt.ylabel("position (m)")
+# plt.show(block=False)
 
 # -------------------------------------------------------------------------
 # Plot 3D foot trajectory
+# print(type([q2R(q) for q in quat]))
+# R=[q2R(q) for q in quat]
+# figF=labFrame()
+# figF=addOrigin(figF, colors=['darkgray','darkgray','darkgray'], lineLength=0.4)
+# figF=addFrames(figF,
+#                 pos,
+#                 [q2R(q) for q in quat])   
+# figF.show()
 
-posPlot = pos
-quatPlot = quat
 
-extraTime = 20
-onesVector = np.ones(int(extraTime*(1/samplePeriod)))
+# posPlot = pos
+# quatPlot = quat
+
+# extraTime = 20
+# onesVector = np.ones(int(extraTime*(1/samplePeriod)))
 
 # Create 6 DOF animation
-fig = plt.figure(figsize=(7, 7))
-ax = fig.add_subplot(111, projection='3d') # Axe3D object
-ax.plot(posPlot[:,0],posPlot[:,1],posPlot[:,2])
-min_, max_ = np.min(np.min(posPlot,axis=0)), np.max(np.max(posPlot,axis=0))
-ax.set_xlim(min_,max_)
-ax.set_ylim(min_,max_)
-ax.set_zlim(min_,max_)
-ax.set_title("trajectory")
-ax.set_xlabel("x position (m)")
-ax.set_ylabel("y position (m)")
-ax.set_zlabel("z position (m)")
-plt.show(block=False)
+# fig = plt.figure(figsize=(7, 7))
+# ax = fig.add_subplot(111, projection='3d') # Axe3D object
+# ax.plot(posPlot[:,0],posPlot[:,1],posPlot[:,2])
+# min_, max_ = np.min(np.min(posPlot,axis=0)), np.max(np.max(posPlot,axis=0))
+# ax.set_xlim(min_,max_)
+# ax.set_ylim(min_,max_)
+# ax.set_zlim(min_,max_)
+# ax.set_title("trajectory")
+# ax.set_xlabel("x position (m)")
+# ax.set_ylabel("y position (m)")
+# ax.set_zlabel("z position (m)")
+# plt.show(block=False)
 
-plt.show()
+# plt.show()
 
 # if __name__ == "__main__":
 #     main()
