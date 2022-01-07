@@ -62,6 +62,16 @@ accY = lfoot.sel(channel='ACC_Y').values
 accZ = lfoot.sel(channel='ACC_Z').values
 
 
+figAcc=go.Figure()
+figAcc.add_trace(go.Scatter(x=time, y=accX, name='accX'))
+figAcc.add_trace(go.Scatter(x=time, y=accY, name='accY'))
+figAcc.add_trace(go.Scatter(x=time, y=accZ, name='accZ'))
+figGyr=go.Figure()
+figGyr.add_trace(go.Scatter(x=time, y=gyrX, name='gyrX'))
+figGyr.add_trace(go.Scatter(x=time, y=gyrY, name='gyrY'))
+figGyr.add_trace(go.Scatter(x=time, y=gyrZ, name='gyrZ'))
+
+
 # Compute accelerometer magnitude
 acc_mag = np.sqrt(accX*accX+accY*accY+accZ*accZ)
 
@@ -79,6 +89,7 @@ accZ = signal.filtfilt(b, a, accZ, padtype = 'odd', padlen=3*(max(len(b),len(a))
 gyrX = signal.filtfilt(b, a, gyrX, padtype = 'odd', padlen=3*(max(len(b),len(a))-1))
 gyrY = signal.filtfilt(b, a, gyrY, padtype = 'odd', padlen=3*(max(len(b),len(a))-1))
 gyrZ = signal.filtfilt(b, a, gyrZ, padtype = 'odd', padlen=3*(max(len(b),len(a))-1))
+
 
 
 
@@ -132,9 +143,9 @@ for t in range(1,time.size):
 
 EA=np.array([q2euler(q)*180/np.pi for q in quat])
 fig2=go.Figure()
-fig2.add_trace(go.Scatter(x=time, y=EA[:,0], name='X'))
-fig2.add_trace(go.Scatter(x=time, y=EA[:,1], name='Y'))
-fig2.add_trace(go.Scatter(x=time, y=EA[:,2], name='Z'))
+fig2.add_trace(go.Scatter(x=time, y=EA[:,0], name='roll'))
+fig2.add_trace(go.Scatter(x=time, y=EA[:,1], name='pitch'))
+fig2.add_trace(go.Scatter(x=time, y=EA[:,2], name='yaw'))
 # plot(fig2)
 
 # fig=px.line(np.array([q2euler(q)*180/np.pi for q in quat]))
@@ -156,9 +167,9 @@ fig2.add_trace(go.Scatter(x=time, y=EA[:,2], name='Z'))
 
 # Rotate body accelerations to Earth frame
 fig3=go.Figure()
-fig3.add_trace(go.Scatter(x=time,y= accX*9.81, line=dict(color='red', dash='dot')))
-fig3.add_trace(go.Scatter(x=time,y= accY*9.81, line=dict(color='green', dash='dot')))
-fig3.add_trace(go.Scatter(x=time,y= accZ*9.81, line=dict(color='blue', dash='dot')))
+fig3.add_trace(go.Scatter(x=time,y= accX*9.81, line=dict(color='red', dash='dot'), name='X raw'))
+fig3.add_trace(go.Scatter(x=time,y= accY*9.81, line=dict(color='green', dash='dot'), name='Y raw'))
+fig3.add_trace(go.Scatter(x=time,y= accZ*9.81, line=dict(color='blue', dash='dot'), name='Z raw'))
 
 
 # # fig = plt.figure(figsize=(10, 5))
@@ -174,9 +185,9 @@ acc = np.array(acc)
 acc = acc - np.array([0,0,1])
 acc = acc * 9.81
 
-fig3.add_trace(go.Scatter(x=time,y= acc[:,0], line=dict(color='red')))
-fig3.add_trace(go.Scatter(x=time,y= acc[:,1], line=dict(color='green')))
-fig3.add_trace(go.Scatter(x=time,y= acc[:,2], line=dict(color='blue')))
+fig3.add_trace(go.Scatter(x=time,y= acc[:,0], line=dict(color='red'), name='X free'))
+fig3.add_trace(go.Scatter(x=time,y= acc[:,1], line=dict(color='green'), name='Y free'))
+fig3.add_trace(go.Scatter(x=time,y= acc[:,2], line=dict(color='blue'), name='Z free'))
 # plot(fig3)
 
 
