@@ -2,11 +2,13 @@ import ahrs
 from ahrs.common.orientation import q_prod, q_conj, acc2q, am2q, q2R, q_rot, q2euler
 import pyquaternion
 import ximu_python_library.xIMUdataClass as xIMU
+from scipy.spatial.transform import Rotation as R
 import numpy as np
 from scipy import signal
 from matplotlib import pyplot as plt
+from sklearn.decomposition import PCA
 from mpl_toolkits.mplot3d import Axes3D
-from main import getIMU, selTime
+from main import getIMU, selTime, getPCAaxis
 from plotFrames import labFrame, addFrames, addOrigin
 
 import plotly.express as px
@@ -41,12 +43,12 @@ stopTime = 60
     
     # xIMUdata = xIMU.xIMUdataClass(filePath, 'InertialMagneticSampleRate', 1/samplePeriod)
     
-lfoot=getIMU(filePath, chanelName='Right_Tibialis Anterior', mag=False)
-# lfoot=getIMU(filePath, chanelName='Left_Semitendinosus', mag=False)
+# lfoot=getIMU(filePath, chanelName='Right_Tibialis Anterior', mag=True)
+lfoot=getIMU(filePath, chanelName='Left_Semitendinosus', mag=True)
 
 
 # rate=lfoot.attrs['rate']
-rate=120
+rate=60
 samplePeriod=1/rate
 # print(lfoot) # OK
 lfoot=lfoot.meca.time_normalize(time_vector=selTime([startTime,stopTime],rate))
@@ -60,6 +62,10 @@ gyrZ = lfoot.sel(channel='GYRO_Z').values
 accX = lfoot.sel(channel='ACC_X').values
 accY = lfoot.sel(channel='ACC_Y').values
 accZ = lfoot.sel(channel='ACC_Z').values
+magX = lfoot.sel(channel='MAG_X').values
+magY = lfoot.sel(channel='MAG_Y').values
+magZ = lfoot.sel(channel='MAG_Z').values
+
 
 
 figAcc=go.Figure()
@@ -70,17 +76,21 @@ figGyr=go.Figure()
 figGyr.add_trace(go.Scatter(x=time, y=gyrX, name='gyrX'))
 figGyr.add_trace(go.Scatter(x=time, y=gyrY, name='gyrY'))
 figGyr.add_trace(go.Scatter(x=time, y=gyrZ, name='gyrZ'))
+figMag=go.Figure()
+figMag.add_trace(go.Scatter(x=time, y=magX, name='magX'))
+figMag.add_trace(go.Scatter(x=time, y=magY, name='magY'))
+figMag.add_trace(go.Scatter(x=time, y=magZ, name='magZ'))
 
 
 # Compute accelerometer magnitude
 acc_mag = np.sqrt(accX*accX+accY*accY+accZ*accZ)
 
 # LP filter accelerometer data
-filtCutOff = 5
+filtCutOff = 15
 b, a = signal.butter(1, (2*filtCutOff)/(1/samplePeriod), 'lowpass')
 acc_magFilt = signal.filtfilt(b, a, acc_mag-1, padtype = 'odd', padlen=3*(max(len(b),len(a))-1))
 
-filtCutOff = 2
+filtCutOff = 15
 b, a = signal.butter(1, (2*filtCutOff)/(1/samplePeriod), 'lowpass')
 accX = signal.filtfilt(b, a, accX, padtype = 'odd', padlen=3*(max(len(b),len(a))-1))
 accY = signal.filtfilt(b, a, accY, padtype = 'odd', padlen=3*(max(len(b),len(a))-1))
@@ -90,11 +100,28 @@ gyrX = signal.filtfilt(b, a, gyrX, padtype = 'odd', padlen=3*(max(len(b),len(a))
 gyrY = signal.filtfilt(b, a, gyrY, padtype = 'odd', padlen=3*(max(len(b),len(a))-1))
 gyrZ = signal.filtfilt(b, a, gyrZ, padtype = 'odd', padlen=3*(max(len(b),len(a))-1))
 
-
+magX = signal.filtfilt(b, a, magX, padtype = 'odd', padlen=3*(max(len(b),len(a))-1))
+magY = signal.filtfilt(b, a, magY, padtype = 'odd', padlen=3*(max(len(b),len(a))-1))
+magZ = signal.filtfilt(b, a, magZ, padtype = 'odd', padlen=3*(max(len(b),len(a))-1))
 
 
 # Threshold detection
 stationary = acc_magFilt < 0.20
+dynamic = acc_magFilt > 0.20
+
+
+# === CALIBRATION ======
+initPeriod = 0.3
+indexSel = time<=time[0]+initPeriod
+
+# acc = np.array([accX[indexSel], accY[indexSel],accZ[indexSel]])
+acc = np.array([np.mean(accX[indexSel]), np.mean(accY[indexSel]), np.mean(accZ[indexSel])])
+acc /= np.linalg.norm(acc)
+v_static=acc
+
+gyr = np.array([gyrX[dynamic], gyrY[dynamic],gyrZ[dynamic]])
+v_dynamic=getPCAaxis(gyr)
+print(v_dynamic)
 
 # plt.figure()
 # plt.plot(time,acc_magFilt)
@@ -115,23 +142,29 @@ initPeriod = 0.5
 indexSel = time<=time[0]+initPeriod
 # gyr=np.zeros(3, dtype=np.float64)
 acc = np.array([np.mean(accX[indexSel]), np.mean(accY[indexSel]), np.mean(accZ[indexSel])])
+mag = np.array([np.mean(magX[indexSel]), np.mean(magY[indexSel]), np.mean(magZ[indexSel])])
 mahony = ahrs.filters.Mahony(Kp=1, Ki=0,KpInit=1, frequency=1/samplePeriod)
 tilt = ahrs.filters.Tilt()
 angular_rate = ahrs.filters.AngularRate(Dt=1/rate)
+triad=ahrs.filters.TRIAD()
 # -->initialize from mahony
 # q = np.array([1.0,0.0,0.0,0.0], dtype=np.float64)
 # for i in range(0, 4000):
 #     q = mahony.updateIMU(q, gyr=gyr, acc=acc)
 
 # -->initialize from tilt
-quat[0,:]=tilt.estimate(acc)
+quat[0,:]=tilt.estimate(acc, mag)
+# quat[0,:]=R.from_euler('zyx', [0,0,0]).as_quat()
 
 for t in range(1,time.size):
     acc = np.array([accX[t],accY[t],accZ[t]])
+    acc /= np.linalg.norm(acc)
+    mag = np.array([magX[t],magY[t],magZ[t]])
+    mag /= np.linalg.norm(mag)
     gyr = np.array([gyrX[t],gyrY[t],gyrZ[t]])*np.pi/180
     q= quat[t-1,:]
     if(stationary[t]): 
-        quat[t,:]=q
+        quat[t,:]=triad.estimate(w1=acc, w2=mag, representation='quaternion')
     else:
         quat[t,:]=angular_rate.update(q, gyr)
 
@@ -141,12 +174,14 @@ for t in range(1,time.size):
 # plt.show()
 
 
-EA=np.array([q2euler(q)*180/np.pi for q in quat])
+# EA=np.array([q2euler(q)*180/np.pi for q in quat])
+r=R.from_quat(quat)
+EA=r.as_euler('zyx',degrees=True)
 fig2=go.Figure()
 fig2.add_trace(go.Scatter(x=time, y=EA[:,0], name='roll'))
 fig2.add_trace(go.Scatter(x=time, y=EA[:,1], name='pitch'))
 fig2.add_trace(go.Scatter(x=time, y=EA[:,2], name='yaw'))
-# plot(fig2)
+plot(fig2)
 
 # fig=px.line(np.array([q2euler(q)*180/np.pi for q in quat]))
 

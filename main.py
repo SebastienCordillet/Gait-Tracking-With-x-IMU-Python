@@ -38,4 +38,10 @@ def selTime(times, rate):
     time = np.arange(start=times[0], stop=times[1], step=1 / rate)
     
     return(time)
+
+def getPCAaxis(gyr):
+    from sklearn.decomposition import PCA
+    pca=PCA(n_components=1)
+    pca.fit(gyr.T)
+    return(pca.components_[0])
     
