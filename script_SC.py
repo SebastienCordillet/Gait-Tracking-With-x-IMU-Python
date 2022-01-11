@@ -9,7 +9,7 @@ from matplotlib import pyplot as plt
 from sklearn.decomposition import PCA
 from mpl_toolkits.mplot3d import Axes3D
 from main import getIMU, selTime, getPCAaxis
-from plotFrames import labFrame, addFrames, addOrigin
+from plotFrames import labFrame, addFrames, addOrigin, addFrame
 
 import plotly.express as px
 from plotly.offline import plot
@@ -115,14 +115,23 @@ initPeriod = 0.3
 indexSel = time<=time[0]+initPeriod
 
 # acc = np.array([accX[indexSel], accY[indexSel],accZ[indexSel]])
-acc = np.array([np.mean(accX[indexSel]), np.mean(accY[indexSel]), np.mean(accZ[indexSel])])
-acc /= np.linalg.norm(acc)
-v_static=acc
+y_calib = np.array([np.mean(accX[indexSel]), np.mean(accY[indexSel]), np.mean(accZ[indexSel])])
+y_calib /= np.linalg.norm(y_calib)
+
 
 gyr = np.array([gyrX[dynamic], gyrY[dynamic],gyrZ[dynamic]])
-v_dynamic=getPCAaxis(gyr)
-print(v_dynamic)
+z_calib=getPCAaxis(gyr)
+z_calib *= -1
+# print(v_dynamic)
+x_calib=np.cross(y_calib, z_calib)
+y_calib=np.cross(z_calib,x_calib)
+R_calib=R.from_matrix(np.array([x_calib.T,y_calib.T,z_calib.T]))
 
+print(R_calib.as_matrix())
+F1=labFrame()
+F1=addOrigin(F1, colors=['darkgrey','darkgrey','darkgrey'])
+F1=addFrame(F1, R=R_calib.as_matrix())
+plot(F1)
 # plt.figure()
 # plt.plot(time,acc_magFilt)
 # plt.plot(time,stationary)
@@ -181,7 +190,7 @@ fig2=go.Figure()
 fig2.add_trace(go.Scatter(x=time, y=EA[:,0], name='roll'))
 fig2.add_trace(go.Scatter(x=time, y=EA[:,1], name='pitch'))
 fig2.add_trace(go.Scatter(x=time, y=EA[:,2], name='yaw'))
-plot(fig2)
+# plot(fig2)
 
 # fig=px.line(np.array([q2euler(q)*180/np.pi for q in quat]))
 

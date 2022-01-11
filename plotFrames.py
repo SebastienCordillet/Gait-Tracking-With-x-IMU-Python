@@ -42,7 +42,8 @@ def addOrigin(fig=go.Figure(),
                      [0,1,0],
                      [0,0,1]],
                  name='LAB',
-                 annotations=annotations
+                 annotations=annotations,
+                 colors=colors
                  )
     
     return(fig)
