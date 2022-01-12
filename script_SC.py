@@ -43,8 +43,8 @@ stopTime = 60
     
     # xIMUdata = xIMU.xIMUdataClass(filePath, 'InertialMagneticSampleRate', 1/samplePeriod)
     
-# lfoot=getIMU(filePath, chanelName='Right_Tibialis Anterior', mag=True)
-lfoot=getIMU(filePath, chanelName='Left_Semitendinosus', mag=True)
+lfoot=getIMU(filePath, chanelName='Right_Tibialis Anterior', mag=True)
+# lfoot=getIMU(filePath, chanelName='Left_Semitendinosus', mag=True)
 
 
 # rate=lfoot.attrs['rate']
@@ -117,21 +117,24 @@ indexSel = time<=time[0]+initPeriod
 # acc = np.array([accX[indexSel], accY[indexSel],accZ[indexSel]])
 y_calib = np.array([np.mean(accX[indexSel]), np.mean(accY[indexSel]), np.mean(accZ[indexSel])])
 y_calib /= np.linalg.norm(y_calib)
+y_calib *= -1
 
 
 gyr = np.array([gyrX[dynamic], gyrY[dynamic],gyrZ[dynamic]])
-z_calib=getPCAaxis(gyr)
-z_calib *= -1
+# z_calib=getPCAaxis(gyr)
+z_calib=[0, -1, 0]
+# z_calib *= -1
 # print(v_dynamic)
 x_calib=np.cross(y_calib, z_calib)
-y_calib=np.cross(z_calib,x_calib)
+z_calib=np.cross(x_calib,y_calib)
 R_calib=R.from_matrix(np.array([x_calib.T,y_calib.T,z_calib.T]))
 
 print(R_calib.as_matrix())
-F1=labFrame()
-F1=addOrigin(F1, colors=['darkgrey','darkgrey','darkgrey'])
-F1=addFrame(F1, R=R_calib.as_matrix())
-plot(F1)
+# F1=labFrame()
+# F1=addOrigin(F1, colors=['darkgrey','darkgrey','darkgrey'])
+# F1=addFrame(F1, R=R_calib.as_matrix())
+# F1.layout.title.text="sensor 2 segment in local frame"
+# plot(F1)
 # plt.figure()
 # plt.plot(time,acc_magFilt)
 # plt.plot(time,stationary)
@@ -147,22 +150,43 @@ plot(F1)
 quat  = np.zeros((time.size, 4), dtype=np.float64)
 
 # initial convergence
-initPeriod = 0.5
+initPeriod = 0.3
 indexSel = time<=time[0]+initPeriod
 # gyr=np.zeros(3, dtype=np.float64)
 acc = np.array([np.mean(accX[indexSel]), np.mean(accY[indexSel]), np.mean(accZ[indexSel])])
+acc /= np.linalg.norm(acc)
 mag = np.array([np.mean(magX[indexSel]), np.mean(magY[indexSel]), np.mean(magZ[indexSel])])
-mahony = ahrs.filters.Mahony(Kp=1, Ki=0,KpInit=1, frequency=1/samplePeriod)
+mag /= np.linalg.norm(mag)
+# mahony = ahrs.filters.Mahony(Kp=1, Ki=0,KpInit=1, frequency=1/samplePeriod)
 tilt = ahrs.filters.Tilt()
 angular_rate = ahrs.filters.AngularRate(Dt=1/rate)
-triad=ahrs.filters.TRIAD()
+triad=ahrs.filters.TRIAD(frame='ENU')
 # -->initialize from mahony
 # q = np.array([1.0,0.0,0.0,0.0], dtype=np.float64)
 # for i in range(0, 4000):
 #     q = mahony.updateIMU(q, gyr=gyr, acc=acc)
 
 # -->initialize from tilt
-quat[0,:]=tilt.estimate(acc, mag)
+# quat[0,:]=tilt.estimate(acc)
+quat[0,:]=triad.estimate(w1=acc, w2=R.from_rotvec(np.array([np.pi,0,0])).apply(mag), representation='quaternion')
+
+imu_f=R.from_quat(quat[0,:])
+body_f=imu_f*R_calib.inv()
+print(imu_f.as_euler('zyx', degrees=True))
+# print('vecteur acceleration dans repère imu : {}'.format(acc))
+print('vecteur acc dans repère global{}'.format(imu_f.apply(acc)))
+# print(R.from_quat(quat[0,:]).inv().as_euler('zyx', degrees=True)[0])
+
+# print('Angles euler de imu frame : {}'.format(imu_f.as_euler('zyx',degrees=True)))
+# print('Angles euler de inverse imu frame :{}'.format(imu_f.inv().as_euler('zyx',degrees=True)))
+
+F2=labFrame()
+F2=addOrigin(F2, colors=['darkgrey','darkgrey','darkgrey'])
+F2=addFrame(F2,posInit=[0,0,0.5], R=imu_f.as_matrix())#inertial frame 
+# F2=addFrame(F2,posInit=[0,0,0.5], R=imu_f.inv().as_matrix(), colors=['blue', 'red','green'])#inertial frame 
+# F2=addFrame(F2,posInit=[0,0,0.5], R=body_f.as_matrix(), colors=['blue', 'red','green'])#body frame 
+F2.layout.title.text="sensor 2 segment in global frame"
+plot(F2)
 # quat[0,:]=R.from_euler('zyx', [0,0,0]).as_quat()
 
 for t in range(1,time.size):
